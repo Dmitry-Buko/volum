@@ -1,9 +1,13 @@
         // ==========================================
         // ГЕНЕРАЦИЯ СТАТИЧЕСКИХ QR-КОДОВ (локально, без внешнего сервиса)
+        // Ссылка строится от текущего домена — QR работает на любом хостинге
         // try/catch: если библиотека не загрузилась, остальной скрипт должен жить
         // ==========================================
         try {
-            document.querySelectorAll('.qr-slot').forEach(el => new QRCode(el, { text: el.dataset.qr, width: 100, height: 100, correctLevel: QRCode.CorrectLevel.M }));
+            document.querySelectorAll('.qr-slot').forEach(el => {
+                const arUrl = new URL('ar.html?name=' + encodeURIComponent(el.dataset.qr), window.location.href).href;
+                new QRCode(el, { text: arUrl, width: 100, height: 100, correctLevel: QRCode.CorrectLevel.M });
+            });
         } catch (e) {
             console.warn('QR-библиотека недоступна, статические QR пропущены:', e);
         }
@@ -215,7 +219,7 @@
                 }
             } else {
                 const modelName = modelsList[currentModelIndex].name;
-                const magicUrl = new URL(`qr.php?name=${modelName}`, window.location.href).href;
+                const magicUrl = new URL(`ar.html?name=${modelName}`, window.location.href).href;
                 // Генерируем QR локально (qrcodejs) вместо внешнего сервиса
                 dynamicQrBox.innerHTML = '';
                 try {

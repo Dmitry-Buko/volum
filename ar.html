@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR-просмотр модели — Volum</title>
+
+    <script type="module" src="assets/js/model-viewer.min.js?v=1"></script>
+
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            background: #050505;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            -webkit-font-smoothing: antialiased;
+            padding: 20px;
+        }
+        .brand {
+            font-size: 13px;
+            letter-spacing: 2px;
+            text-transform: lowercase;
+            color: #666;
+            margin-bottom: 14px;
+        }
+        .brand b { color: #ff6a00; font-weight: 700; }
+        h1 { font-size: 24px; letter-spacing: -0.5px; margin-bottom: 18px; }
+        .viewer-card {
+            width: 100%;
+            max-width: 520px;
+            height: 62vh;
+            max-height: 560px;
+            border-radius: 20px;
+            overflow: hidden;
+            background: #111;
+            border: 1px solid #222;
+        }
+        model-viewer {
+            width: 100%;
+            height: 100%;
+            background-color: #111;
+            --progress-bar-color: #ff6a00;
+        }
+        model-viewer::part(default-ar-button) { display: none; }
+        .actions { margin-top: 20px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .btn {
+            display: inline-block;
+            background: #ff6a00;
+            color: #000;
+            font-weight: 700;
+            text-decoration: none;
+            padding: 14px 38px;
+            border-radius: 100px;
+            font-size: 16px;
+            border: none;
+            cursor: pointer;
+        }
+        .btn.ghost {
+            background: transparent;
+            color: #fff;
+            border: 1px solid #444;
+            margin-top: 10px;
+        }
+        .hint { color: #a1a1aa; font-size: 13px; line-height: 1.5; max-width: 340px; margin-top: 8px; }
+        .stub p { color: #a1a1aa; font-size: 16px; line-height: 1.5; margin: 0 0 24px; max-width: 420px; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="brand">powered by <b>volum</b></div>
+
+    <!-- Основной экран: интерактивный 3D-просмотр + кнопка AR -->
+    <div id="main-view" class="hidden">
+        <h1 id="title">Модель</h1>
+        <div class="viewer-card">
+            <model-viewer
+                id="mv"
+                ar
+                ar-modes="webxr scene-viewer quick-look"
+                camera-controls
+                auto-rotate
+                shadow-intensity="0.5"
+                exposure="1">
+            </model-viewer>
+        </div>
+        <div class="actions">
+            <button class="btn" id="ar-btn" type="button" disabled style="opacity:.5">Посмотреть в AR</button>
+            <p class="hint" id="hint">Вращайте модель пальцем. Кнопка AR появится, если устройство поддерживает дополненную реальность.</p>
+        </div>
+    </div>
+
+    <!-- Заглушка: неизвестное имя или файл ещё не загружен -->
+    <div id="stub-view" class="stub hidden">
+        <h1>Демо скоро появится</h1>
+        <p id="stub-text">AR-демо для этого предмета ещё в подготовке.</p>
+        <a class="btn ghost" href="index.html">На главную</a>
+    </div>
+
+    <script>
+    (function () {
+        // Имена из QR-кодов главной страницы → файлы моделей.
+        // Ключи-синонимы хотспотов (sofa/figure/lamp) ведут на те же файлы.
+        var MODELS = {
+            chair1: { usdz: 'assets/models/rattan-chair.usdz', glb: 'assets/models/rattan-chair.glb', poster: 'assets/img/poster-chair1.webp', title: 'Диван' },
+            sofa:   { usdz: 'assets/models/rattan-chair.usdz', glb: 'assets/models/rattan-chair.glb', poster: 'assets/img/poster-chair1.webp', title: 'Диван' },
+            puff:   { usdz: 'assets/models/puff.usdz',         glb: 'assets/models/puff.glb',         poster: 'assets/img/poster-puff.webp',   title: 'Сервант' },
+            lamp:   { usdz: 'assets/models/puff.usdz',         glb: 'assets/models/puff.glb',         poster: 'assets/img/poster-puff.webp',   title: 'Сервант' },
+            model3: { usdz: 'assets/models/model.usdz',        glb: 'assets/models/model.glb',        poster: 'assets/img/poster-model3.webp', title: 'Кофемашина' },
+            figure: { usdz: 'assets/models/model.usdz',        glb: 'assets/models/model.glb',        poster: 'assets/img/poster-model3.webp', title: 'Кофемашина' },
+            chair2: { usdz: 'assets/models/chair.usdz',        glb: 'assets/models/chair.glb',        poster: null,                             title: 'Кресло' }
+        };
+
+        var mainView = document.getElementById('main-view');
+        var stubView = document.getElementById('stub-view');
+        var stubText = document.getElementById('stub-text');
+        var title    = document.getElementById('title');
+        var mv       = document.getElementById('mv');
+        var arBtn    = document.getElementById('ar-btn');
+        var hint     = document.getElementById('hint');
+
+        function showStub(msg) {
+            mainView.classList.add('hidden');
+            stubView.classList.remove('hidden');
+            stubText.textContent = msg;
+        }
+
+        var name  = new URLSearchParams(location.search).get('name');
+        var model = MODELS[name];
+
+        if (!model) {
+            showStub('AR-демо для этого предмета ещё в подготовке. Отсканируйте QR-код другого предмета или вернитесь на сайт.');
+            return;
+        }
+
+        title.textContent = model.title;
+        mainView.classList.remove('hidden');
+
+        // Проверяем, что файл модели реально доступен (не выгружен/переименован)
+        fetch(model.glb, { method: 'HEAD' }).then(function (r) {
+            if (!r.ok) {
+                showStub('Файл модели пока не загружен на сервер — скоро добавим.');
+                return;
+            }
+            mv.src = model.glb;
+            if (model.poster) mv.setAttribute('poster', model.poster);
+            // ios-src ставим только если USDZ реально существует:
+            // иначе iOS покажет активную кнопку AR, которая не откроется (файла нет)
+            if (model.usdz) {
+                fetch(model.usdz, { method: 'HEAD' }).then(function (r) {
+                    if (r.ok) mv.setAttribute('ios-src', model.usdz);
+                }).catch(function () {});
+            }
+        }).catch(function () {
+            showStub('Не удалось получить модель. Проверьте подключение к интернету и попробуйте ещё раз.');
+        });
+
+        // Кнопка AR активна только когда устройство умеет AR (iOS Quick Look / Android Scene Viewer / WebXR)
+        function refreshArState() {
+            if (mv.canActivateAR) {
+                arBtn.disabled = false;
+                arBtn.style.opacity = '1';
+                hint.textContent = 'Вращайте модель пальцем, приблизьте двумя. Нажмите кнопку, чтобы разместить предмет в своей комнате.';
+            } else {
+                arBtn.disabled = true;
+                arBtn.style.opacity = '0.5';
+                hint.textContent = 'Вращайте модель пальцем. AR-примерка доступна на iPhone и Android-смартфонах с поддержкой AR.';
+            }
+        }
+        mv.addEventListener('load', refreshArState);
+        mv.addEventListener('ar-status', refreshArState);
+
+        arBtn.addEventListener('click', function () {
+            if (mv.canActivateAR) mv.activateAR();
+        });
+    })();
+    </script>
+</body>
+</html>
